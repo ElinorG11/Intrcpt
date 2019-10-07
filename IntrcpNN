@@ -1,0 +1,192 @@
+import keras
+import lasagne
+import theano
+import random
+import numpy as np
+import tensorboard
+from Interceptor_V2 import Init, Draw, Game_step
+
+# Replay Memory
+REPLAYMEMORY = []
+
+# Set Hyper Parameters:
+BATCH_SIZE = 10
+LEARNING_RATE = 0.08
+NUMBER_OF_ACTIONS = 4
+NUM_OF_EPISODES = 1000
+discount = 0.99
+size_RM = 100 # Size of replay memory, save last 10 states
+
+# Training of the self-learning agent
+def train():
+	EPSILON = 0.8
+
+	# Setting counters:
+	average_loss = 0
+	average_reward = 0
+
+	# Tensor types
+	STATE = theano.tensor.tensor4()
+	NEWSTATE = theano.tensor.tensor4()
+	REWARD = theano.tensor.ivector()
+	DISCOUNT = theano.tensor.ivector()
+	ACTION = theano.tensor.ivector()
+
+	# building network
+	network = build_network()
+	target_network = build_network()
+	params = lasagne.layers.get_all_params(network)
+
+	all_params = lasagne.layers.helper.get_all_param_values(network)
+	lasagne.layers.helper.set_all_param_values(target_network, all_params)
+
+	# get maximum q_value and particular action
+	qvals = lasagne.layers.get_output(network, STATE)
+	bestAction = qvals.argmax(-1)
+	qval = qvals[0][ACTION]
+
+	# get max Q_value of next state
+	next_q_vals = lasagne.layers.get_output(target_network, NEWSTATE)
+	maxNextValue = next_q_vals.max()
+
+	# loss function with Stochastic Gradient Descent
+	target = (REWARD + DISCOUNT * theano.tensor.max(next_q_vals, axis=1,
+													keepdims=True))
+	diff = target - qvals[
+		theano.tensor.arange(BATCH_SIZE), ACTION.reshape((-1,))].reshape(
+		(-1, 1))
+	loss = 0.5 * diff ** 2
+	loss = theano.tensor.mean(loss)
+	grad = theano.tensor.grad(loss, params)
+	updates = lasagne.updates.rmsprop(grad, params, LEARNING_RATE)
+	updates = lasagne.updates.apply_momentum(updates, params, 0.9)
+
+	# theano function for training and predicting q_values
+	f_train = theano.function([STATE, ACTION, REWARD, NEWSTATE, DISCOUNT],
+							  loss,
+							  updates=updates, allow_input_downcast=True)
+	f_predict = theano.function([STATE], bestAction,
+								allow_input_downcast=True)
+	f_qvals = theano.function([STATE], qvals, allow_input_downcast=True)
+	f_max = theano.function([NEWSTATE], maxNextValue,
+							allow_input_downcast=True)
+
+	for episode in range(NUM_OF_EPISODES):
+		# Use greedy epsilon algorithm to choose between random action (explore env.) or previous action (exploit env.)
+		rand = random.randrange(0,1)
+		if rand < EPSILON or episode == 0:
+			action =random.randint(0, NUMBER_OF_ACTIONS - 1)
+		else:
+			predict_state = np.reshape(state, [2,2,2,2])
+			action = int(f_predict(predict_state))
+
+		r_locs, i_locs, c_locs, ang, score = Game_step(action)
+
+		newState = [r_locs, i_locs, c_locs, ang]
+		if episode == 0:
+			state = [r_locs, i_locs, c_locs, ang]
+			reward = 0
+		next_reward =  score - reward
+		reward = next_reward
+
+		# store in reply memory
+		REPLAYMEMORY.append((state, action, next_reward, newState, discount))
+		# delete one tuple if replay memory becomes too big
+		if len(REPLAYMEMORY) > size_RM:
+			REPLAYMEMORY.pop(0)
+
+		# training the network
+		states, actions, rewards, newstates, discounts = get_batch()
+		loss = f_train(states, actions, rewards, newstates, discounts)
+
+		average_loss = average_loss + loss
+		average_reward = average_reward + reward
+
+		# print information
+		print("Average loss: ", average_loss / episode)
+		print("Average Reward: ", average_reward / episode)
+		print("States : ", newState)
+
+		# change exploration-exploitation ratio
+		if EPSILON > 0.1:
+			EPSILON = EPSILON - 0.0093
+
+		# updating the target network
+		if episode % 64 == 0:
+			target_network = build_network()
+			all_param_values = lasagne.layers.get_all_param_values(network)
+			lasagne.layers.set_all_param_values(target_network,
+												all_param_values)
+
+		# change the state to newState
+		state = newState
+
+		Draw()
+
+	# saving parameters of the network
+	np.savez('model.npz', *lasagne.layers.get_all_param_values(network))
+	return network
+
+# building the network
+def build_network():
+    l_in = lasagne.layers.InputLayer(shape=[2,2,2,2])
+    l_hidden1 = lasagne.layers.DenseLayer(
+        l_in,
+        num_units=512,
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.HeUniform(),
+        b=lasagne.init.Constant(.1)
+    )
+    l_hidden2 = lasagne.layers.DenseLayer(
+        l_hidden1,
+        num_units=1024,
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.HeUniform(),
+        b=lasagne.init.Constant(.1)
+    )
+    l_hidden3 = lasagne.layers.DenseLayer(
+        l_hidden2,
+        num_units=512,
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.HeUniform(),
+        b=lasagne.init.Constant(.1)
+    )
+    l_hidden4 = lasagne.layers.DenseLayer(
+        l_hidden3,
+        num_units=128,
+        nonlinearity=lasagne.nonlinearities.rectify,
+        W=lasagne.init.HeUniform(),
+        b=lasagne.init.Constant(.1)
+    )
+    l_out = lasagne.layers.DenseLayer(
+        l_hidden4,
+        num_units=NUMBER_OF_ACTIONS,
+        nonlinearity=None,
+        W=lasagne.init.HeUniform(),
+        b=lasagne.init.Constant(.1)
+    )
+    return l_out
+
+# for getting a batch for training
+def get_batch():
+	counter = 0
+	actions  = np.zeros((BATCH_SIZE,2), dtype=object)
+	discounts = np.zeros((BATCH_SIZE,2), dtype=object)
+	rewards = np.zeros((BATCH_SIZE,2), dtype=object)
+	states = np.zeros((BATCH_SIZE,4), dtype=object)
+	newstates = np.zeros((BATCH_SIZE,4), dtype=object)
+	while counter < BATCH_SIZE:
+		random_action = random.randint(0, len(REPLAYMEMORY) - 1)
+		(state, action, reward, newstate, discount) = REPLAYMEMORY[random_action]
+		actions[counter] = action
+		rewards[counter] = reward
+		discounts[counter] = discount
+
+		states[counter] = state
+		newstates[counter] = newstate
+		counter = counter + 1
+	return states, actions, rewards, newstates, discounts
+
+
+Init()
+network = train()
