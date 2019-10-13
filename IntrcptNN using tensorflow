@@ -16,8 +16,66 @@ EPISODES = 1000
 DISCOUNT = 0.99
 SIZE_RM = 100 # size of replay memory, save last 10 screen-captures
 
+# building the network
+def build_network():
+	model = tf.models.Sequential()
+	model.add(
+		tf.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)))
+	model.add(tf.layers.MaxPooling2D((2, 2)))
+	model.add(tf.layers.Conv2D(64, (3, 3), activation='relu'))
+	model.add(tf.layers.MaxPooling2D((2, 2)))
+	model.add(tf.layers.Conv2D(64, (3, 3), activation='relu'))
+	model.add(tf.layers.Flatten())
+	model.add(tf.layers.Dense(64, activation='relu'))
+	model.add(tf.layers.Dense(10, activation='softmax'))
+	model.summary()
+	model.compile(optimizer='adam',
+				  loss='sparse_categorical_crossentropy',
+				  metrics=['accuracy'])
+	return model
+
+def eval_model(history,network,target):
+	plt.plot(history.history['accuracy'], label='accuracy')
+	plt.plot(history.history['val_accuracy'], label='val_accuracy')
+	plt.xlabel('Epoch')
+	plt.ylabel('Accuracy')
+	plt.ylim([0.5, 1])
+	plt.legend(loc='lower right')
+
+	test_loss, test_acc = tf.model.evaluate(network,target, verbose=2)
+	print(test_acc)
+
+# for getting a batch for training
+def get_batch():
+	counter = 0
+	actions  = np.zeros((BATCH_SIZE,2))
+	discounts = np.zeros((BATCH_SIZE,2))
+	rewards = np.zeros((BATCH_SIZE,2))
+	states = np.zeros((BATCH_SIZE,2))
+	newstates = np.zeros((BATCH_SIZE,2))
+	while counter < BATCH_SIZE:
+		random_action = random.randint(0, len(reply_memory) - 1)
+		(state, action, reward, newstate, discount) = reply_memory[random_action]
+		actions[counter] = action
+		rewards[counter] = reward
+		discounts[counter] = discount
+		states[counter] = state
+		newstates[counter] = newstate
+		counter = counter + 1
+	return states, actions, rewards, newstates, discounts
+
+def optimize(init, train, x, log_x_squared):
+	with tf.Session() as session:
+		session.run(init)
+		print("starting at", "x:", session.run(x), "log(x)^2:",
+			  session.run(log_x_squared))
+		for step in range(10):
+			session.run(train)
+			print("step", step, "x:", session.run(x), "log(x)^2:",
+				  session.run(log_x_squared))
+
 # Training of the self-learning agent
-def train():
+def execProccess():
 	# Setting counters:
 	average_loss = 0
 	average_reward = 0
@@ -89,20 +147,8 @@ def train():
 
 		optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
 		train = optimizer.minimize(log_x_squared)
-
 		init = tf.initialize_all_variables()
-
-		def optimize():
-			with tf.Session() as session:
-				session.run(init)
-				print("starting at", "x:", session.run(x), "log(x)^2:",
-					  session.run(log_x_squared))
-				for step in range(10):
-					session.run(train)
-					print("step", step, "x:", session.run(x), "log(x)^2:",
-						  session.run(log_x_squared))
-
-		optimize()
+		optimize(init,train,x,log_x_squared)
 
 		# tensorflow function for training and predicting q_values
 		f_train = network.train([STATE, ACTION, REWARD, NEWSTATE, DISCOUNT],
@@ -120,12 +166,14 @@ def train():
 		if EPSILON > 0.1:
 			EPSILON = EPSILON - 0.0093
 
+		history = tf.model.fit(network, target_network, epochs=10, batch_size=10)
+		eval_model(history,network,target_network)
+
 		# updating the target network
 		if episode % 32 == 0:
 			target_network = build_network()
 			all_param_values = lasagne.layers.get_all_param_values(network)
-			lasagne.layers.set_all_param_values(target_network,
-												all_param_values)
+			lasagne.layers.set_all_param_values(target_network, all_param_values)
 
 		# change the state to newState
 		state = newState
@@ -135,60 +183,7 @@ def train():
 	# saving parameters of the network
 	keras_model_path = "/tmp/keras_save"
 	network.save(keras_model_path)
-	return network
 
-# building the network
-def build_network():
-	model = models.Sequential()
-	model.add(
-		layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)))
-	model.add(layers.MaxPooling2D((2, 2)))
-	model.add(layers.Conv2D(64, (3, 3), activation='relu'))
-	model.add(layers.MaxPooling2D((2, 2)))
-	model.add(layers.Conv2D(64, (3, 3), activation='relu'))
-	model.add(layers.Flatten())
-	model.add(layers.Dense(64, activation='relu'))
-	model.add(layers.Dense(10, activation='softmax'))
-	model.summary()
-	model.compile(optimizer='adam',
-				  loss='sparse_categorical_crossentropy',
-				  metrics=['accuracy'])
-	return model
 
-def train_model(model):
-	history = model.fit(train_images, train_labels, epochs=10,
-						validation_data=(test_images, test_labels))
-
-def eval_model():
-	plt.plot(history.history['accuracy'], label='accuracy')
-	plt.plot(history.history['val_accuracy'], label='val_accuracy')
-	plt.xlabel('Epoch')
-	plt.ylabel('Accuracy')
-	plt.ylim([0.5, 1])
-	plt.legend(loc='lower right')
-
-	test_loss, test_acc = model.evaluate(test_images, verbose=2)
-	print(test_acc)
-
-# for getting a batch for training
-def get_batch():
-	counter = 0
-	actions  = np.zeros((BATCH_SIZE,2))
-	discounts = np.zeros((BATCH_SIZE,2))
-	rewards = np.zeros((BATCH_SIZE,2))
-	states = np.zeros((BATCH_SIZE,2))
-	newstates = np.zeros((BATCH_SIZE,2))
-	while counter < BATCH_SIZE:
-		random_action = random.randint(0, len(reply_memory) - 1)
-		(state, action, reward, newstate, discount) = reply_memory[random_action]
-		actions[counter] = action
-		rewards[counter] = reward
-		discounts[counter] = discount
-		states[counter] = state
-		newstates[counter] = newstate
-		counter = counter + 1
-	return states, actions, rewards, newstates, discounts
-
-def main():
-	Init()
-	network = train()
+Init()
+execProccess()
