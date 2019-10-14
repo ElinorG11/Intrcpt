@@ -18,16 +18,15 @@ SIZE_RM = 100 # size of replay memory, save last 10 screen-captures
 
 # building the network
 def build_network():
-	model = tf.models.Sequential()
-	model.add(
-		tf.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)))
-	model.add(tf.layers.MaxPooling2D((2, 2)))
-	model.add(tf.layers.Conv2D(64, (3, 3), activation='relu'))
-	model.add(tf.layers.MaxPooling2D((2, 2)))
-	model.add(tf.layers.Conv2D(64, (3, 3), activation='relu'))
-	model.add(tf.layers.Flatten())
-	model.add(tf.layers.Dense(64, activation='relu'))
-	model.add(tf.layers.Dense(10, activation='softmax'))
+	model = tf.keras.Sequential()
+	model.add(tf.keras.layers.Conv2D(32, (3, 3), activation='relu', input_shape=(32, 32, 3)))
+	model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+	model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu'))
+	model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+	model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu'))
+	model.add(tf.keras.layers.Flatten())
+	model.add(tf.keras.layers.Dense(64, activation='relu'))
+	model.add(tf.keras.layers.Dense(10, activation='softmax'))
 	model.summary()
 	model.compile(optimizer='adam',
 				  loss='sparse_categorical_crossentropy',
@@ -81,11 +80,11 @@ def execProccess():
 	average_reward = 0
 
 	# Tensor types
-	STATE = tf.Variable(dtype='object', shape=None, name=None)
-	NEWSTATE = tf.Variable(dtype='object', shape=None, name=None)
-	REWARD = tf.Variable(dtype='object', shape=None, name=None)
-	DISCOUNT = tf.Variable(dtype='object', shape=None, name=None)
-	ACTION = tf.Variable(dtype='object', shape=None, name=None)
+	STATE = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
+	NEWSTATE = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
+	REWARD = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
+	DISCOUNT = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
+	ACTION = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
 
 	# building network
 	network = build_network()
@@ -139,7 +138,6 @@ def execProccess():
 		loss = tf.nn.l2_loss(diff)
 		loss = tf.math.reduce_mean(loss, axis=None, keepdims=False, name=None)
 
-
 		# calculate gradient descent
 		x = tf.Variable(loss, name='x', dtype=object)
 		log_x = tf.log(x)
@@ -171,9 +169,12 @@ def execProccess():
 
 		# updating the target network
 		if episode % 32 == 0:
-			target_network = build_network()
-			all_param_values = lasagne.layers.get_all_param_values(network)
-			lasagne.layers.set_all_param_values(target_network, all_param_values)
+			target_network_update_ops = tf.update_target_variables(target_network.get_qnetwork_variables(),
+																	 network.get_qnetwork_variables(), tau=1.0)
+			with tf.Session() as sess:
+				sess.run(target_network_update_ops)
+				target_network = tf.keras.models.clone_model(network, input_tensors=None, clone_function=None)
+				print("\nCopied model parameters to target network.")
 
 		# change the state to newState
 		state = newState
