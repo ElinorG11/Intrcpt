@@ -1,8 +1,11 @@
 import tensorflow as tf
 import random
 import numpy as np
-import matplotlib.pyplot as plt
-from Interceptor_V2 import Init, Draw, Game_step, action_button
+from tensorflow.python.keras.callbacks import TensorBoard
+from time import time
+from Interceptor_V2 import Init, Draw, Game_step
+
+tensorboard = TensorBoard(log_dir="logs/{}".format(time()))
 
 # Replay Memory
 reply_memory = []
@@ -14,7 +17,8 @@ LEARNING_RATE = 0.08
 NUMBER_OF_ACTIONS = 4
 EPISODES = 1000
 DISCOUNT = 0.99
-SIZE_RM = 100 # size of replay memory, save last 10 screen-captures
+SIZE_RM = 100  # size of replay memory
+
 
 # building the network
 def build_network():
@@ -28,132 +32,96 @@ def build_network():
 	model.add(tf.keras.layers.Dense(64, activation='relu'))
 	model.add(tf.keras.layers.Dense(10, activation='softmax'))
 	model.summary()
-	model.compile(optimizer='adam',
-				  loss='sparse_categorical_crossentropy',
-				  metrics=['accuracy'])
 	return model
 
-def eval_model(history,network,target):
-	plt.plot(history.history['accuracy'], label='accuracy')
-	plt.plot(history.history['val_accuracy'], label='val_accuracy')
-	plt.xlabel('Epoch')
-	plt.ylabel('Accuracy')
-	plt.ylim([0.5, 1])
-	plt.legend(loc='lower right')
-
-	test_loss, test_acc = tf.model.evaluate(network,target, verbose=2)
-	print(test_acc)
-
-# for getting a batch for training
-def get_batch():
-	counter = 0
-	actions  = np.zeros((BATCH_SIZE,2))
-	discounts = np.zeros((BATCH_SIZE,2))
-	rewards = np.zeros((BATCH_SIZE,2))
-	states = np.zeros((BATCH_SIZE,2))
-	newstates = np.zeros((BATCH_SIZE,2))
-	while counter < BATCH_SIZE:
-		random_action = random.randint(0, len(reply_memory) - 1)
-		(state, action, reward, newstate, discount) = reply_memory[random_action]
-		actions[counter] = action
-		rewards[counter] = reward
-		discounts[counter] = discount
-		states[counter] = state
-		newstates[counter] = newstate
-		counter = counter + 1
-	return states, actions, rewards, newstates, discounts
 
 def optimize(init, train, x, log_x_squared):
 	with tf.Session() as session:
 		session.run(init)
-		print("starting at", "x:", session.run(x), "log(x)^2:",
-			  session.run(log_x_squared))
+		# print("starting at", "x:", session.run(x), "log(x)^2:", session.run(log_x_squared))
 		for step in range(10):
 			session.run(train)
-			print("step", step, "x:", session.run(x), "log(x)^2:",
-				  session.run(log_x_squared))
+			# print("step", step, "x:", session.run(x), "log(x)^2:", session.run(log_x_squared))
+
+
+def predict(state, target, network):
+	with tf.Session() as session:
+		tf.keras.backend.set_session(session)
+		with tf.keras.sess.as_default():
+			with tf.keras.graph.as_default():
+				if target:
+					return target.predict(state)
+				else:
+					return network.predict(state)
+
 
 # Training of the self-learning agent
-def execProccess():
+def exec_process():
 	# Setting counters:
+	global EPSILON
 	average_loss = 0
 	average_reward = 0
 
-	# Tensor types
-	STATE = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
-	NEWSTATE = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
-	REWARD = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
-	DISCOUNT = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
-	ACTION = tf.Variable(initial_value=0,trainable=True,validate_shape=False,)
+	state = np.ndarray(shape=(1, 1, 1, 1), dtype=float)
 
 	# building network
 	network = build_network()
 	target_network = build_network()
 
+	action = random.randint(0, NUMBER_OF_ACTIONS - 1)
+	r_locs, i_locs, c_locs, ang, score = Game_step(action)
+	np.append(state, [r_locs, i_locs, c_locs, ang])
+	reward = 0
+
 	for episode in range(EPISODES):
-		# Use greedy epsilon algorithm to choose between random action (explore env.) or previous action (exploit env.)
-		rand = random.random()
-		if rand < EPSILON or episode == 0:
-			action = random.randint(0, NUMBER_OF_ACTIONS - 1)
-		else:
-			predict_state = np.reshape(state, [2,2,2,2])
-			action = int(f_predict(predict_state))
 
-		r_locs, i_locs, c_locs, ang, score = Game_step(action)
+		# tensorflow function for training model
+		network.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+		target_network.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+		state = tf.reshape(state, shape=(1,1,1,1))
+		history = network.fit(state, epochs=10, batch_size=10)
 
+		print("history dict: ", history.history)
+
+		# calculate state, next_state, reward and avg. reward
 		newState = [r_locs, i_locs, c_locs, ang]
-		if EPISODES == 0:
-			state = [r_locs, i_locs, c_locs, ang]
-			reward = 0
-		next_reward =  score - reward
+
+		next_reward = score - reward
 		reward = next_reward
+		average_reward = average_reward + reward
+
+		# get maximum q_value and particular action
+		with tf.Session() as sess:
+			qvals = sess.run(network, state)
+		bestAction = qvals.argmax(-1)
+		qval = qvals[action]
+
+		# get max Q_value of next state
+		with tf.Session() as sess:
+			next_q_vals = sess.run(target_network, newState)
+		maxNextValue = next_q_vals.max()
+
+		# loss function with Stochastic Gradient Descent
+		target = (reward + DISCOUNT * tf.math.maximum(maxNextValue, qval))
+		diff = target - qvals
+		loss = tf.nn.l2_loss(diff)
+		average_loss = tf.math.reduce_mean(loss, axis=None, keepdims=False, name=None)
+
+		# calculate gradient descent
+		x = tf.keras.Variable(loss, name='x', dtype=object)
+		log_x = tf.log(x)
+		log_x_squared = tf.square(log_x)
+
+		optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
+		train = optimizer.minimize(log_x_squared)
+		init = tf.tf.global_variables_initializer()
+		optimize(init, train, x, log_x_squared)
 
 		# store in reply memory
 		reply_memory.append((state, action, next_reward, newState, DISCOUNT))
 		# delete one tuple if replay memory becomes too big
 		if len(reply_memory) > SIZE_RM:
 			reply_memory.pop(0)
-
-		# training the network
-		states, actions, rewards, newstates, discounts = get_batch()
-		loss = f_train(states, actions, rewards, newstates, discounts)
-
-		average_loss = average_loss + loss
-		average_reward = average_reward + reward
-
-		# get maximum q_value and particular action
-		with tf.Session() as sess:
-			qvals = sess.run(network, STATE)
-		bestAction = qvals.argmax(-1)
-		qval = qvals[ACTION]
-
-		# get max Q_value of next state
-		with tf.Session() as sess:
-			next_q_vals = sess.run(target_network, NEWSTATE)
-		maxNextValue = next_q_vals.max()
-
-		# loss function with Stochastic Gradient Descent
-		target = (REWARD + DISCOUNT * tf.math.maximum(next_q_vals, qvals))
-		diff = target - qvals
-		loss = tf.nn.l2_loss(diff)
-		loss = tf.math.reduce_mean(loss, axis=None, keepdims=False, name=None)
-
-		# calculate gradient descent
-		x = tf.Variable(loss, name='x', dtype=object)
-		log_x = tf.log(x)
-		log_x_squared = tf.square(log_x)
-
-		optimizer = tf.train.GradientDescentOptimizer(LEARNING_RATE)
-		train = optimizer.minimize(log_x_squared)
-		init = tf.initialize_all_variables()
-		optimize(init,train,x,log_x_squared)
-
-		# tensorflow function for training and predicting q_values
-		f_train = network.train([STATE, ACTION, REWARD, NEWSTATE, DISCOUNT],
-								  loss)
-		f_predict = network.predict([STATE], bestAction)
-		f_qvals = network.predict([STATE], qvals)
-		f_max = network.predict([NEWSTATE], maxNextValue)
 
 		# print information
 		print("Average loss: ", average_loss / episode)
@@ -164,22 +132,26 @@ def execProccess():
 		if EPSILON > 0.1:
 			EPSILON = EPSILON - 0.0093
 
-		history = tf.model.fit(network, target_network, epochs=10, batch_size=10)
-		eval_model(history,network,target_network)
-
 		# updating the target network
 		if episode % 32 == 0:
 			target_network_update_ops = tf.update_target_variables(target_network.get_qnetwork_variables(),
-																	 network.get_qnetwork_variables(), tau=1.0)
+																   network.get_qnetwork_variables(), tau=1.0)
 			with tf.Session() as sess:
 				sess.run(target_network_update_ops)
 				target_network = tf.keras.models.clone_model(network, input_tensors=None, clone_function=None)
 				print("\nCopied model parameters to target network.")
 
-		# change the state to newState
+		Draw()
+
+		# Use greedy epsilon algorithm to choose between random action (explore env.) or previous action (exploit env.)
+		rand = random.random()
+		if rand < EPSILON:
+			action = random.randint(0, NUMBER_OF_ACTIONS - 1)
+		else:
+			action = bestAction
 		state = newState
 
-		Draw()
+		r_locs, i_locs, c_locs, ang, score = Game_step(action)
 
 	# saving parameters of the network
 	keras_model_path = "/tmp/keras_save"
@@ -187,4 +159,4 @@ def execProccess():
 
 
 Init()
-execProccess()
+exec_process()
