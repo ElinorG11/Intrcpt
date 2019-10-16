@@ -1,0 +1,56 @@
+def main():
+	# Initializ game:
+	Init()
+	pixel_array = getInput()
+  action = random.randint(0, NUMBER_OF_ACTIONS - 1)
+	r_locs, i_locs, c_locs, ang, score = Game_step(action)
+  state = [r_locs, i_locs, c_locs, ang]
+	network = build_network(pixel_array, state)
+  
+  for episode in range(NUM_OF_EPISODES):
+    ...
+
+# building the network
+def build_network(image_input, data_input):
+	model = tf.keras.Sequential()
+  
+  # Concatenate between convolutional layer that gets image input and dense layer that gets non-image-data
+  l1_conv = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+  l2_dense = tf.keras.layers.Dense(128, activation='softmax')
+  l1_conv(image_input)
+  l2_dense(data_input)
+  concat = tf.keras.layers.Concatenate()
+  input_layer = concat([l1_conv, l2_dense])
+  model.add(input_layer)
+  
+  model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+	model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu'))
+	model.add(tf.keras.layers.MaxPooling2D((2, 2)))
+	model.add(tf.keras.layers.Conv2D(64, (3, 3), activation='relu'))
+	model.add(tf.keras.layers.Flatten())
+	model.add(tf.keras.layers.Dense(64, activation='relu'))
+	model.add(tf.keras.layers.Dense(10, activation='softmax'))
+	model.summary()
+	return model
+
+def getInput():
+	# sacreen-capture dimensions are 640x480 pixels. make image black and white
+	observation = ImageGrab.grab(bbox=None).convert("L")
+	# preprocess the observation, set input to network to be difference image
+	proccessed_image = prepro(observation)
+	# take the difference in the pixel input, since this is more likely to account for interesting information
+	get_motion = proccessed_image - prev_image if prev_image is not None else np.zeros(INPUT_DIM)
+	prev_image = proccessed_image
+	pixel_array = np.array(proccessed_image)
+	return pixel_array
+
+def prepro(Image):
+  # prepro 210x160x3 uint8 frame into 6000 (75x80) 1D float vector
+  Image = Image[::2,::2,0] # downsample by factor of 2.
+
+  # perhaps should use convolution to detect edges of objects and make them white and everything else make black - grayscale image
+  Image[Image == 144] = 0 # erase background (background type 1)
+  Image[Image == 109] = 0 # erase background (background type 2)
+  Image[Image != 0] = 1 # everything else (paddles, ball) just set to 1. this makes the image grayscale effectively
+  return Image.astype(np.float).ravel() # ravel flattens an array and collapses it into a column vector
+  
