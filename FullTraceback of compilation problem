@@ -1,71 +1,17 @@
+C:\Users\elinor.g\Documents\comp_scie\DRL\Intrcpt_latest_version_22_10\venv\Scripts\python.exe C:/Users/elinor.g/Documents/comp_scie/DRL/Intrcpt_latest_version_22_10/ddqn.py
+Traceback (most recent call last):
+  File "C:/Users/elinor.g/Documents/comp_scie/DRL/Intrcpt_latest_version_22_10/ddqn.py", line 1, in <module>
+    import tensorflow as tf
+  File "C:\Users\elinor.g\Documents\comp_scie\DRL\Intrcpt_latest_version_22_10\venv\lib\site-packages\tensorflow\__init__.py", line 98, in <module>
+    from tensorflow_core import *
+  File "C:\Users\elinor.g\Documents\comp_scie\DRL\Intrcpt_latest_version_22_10\venv\lib\site-packages\tensorflow_core\__init__.py", line 40, in <module>
+    from tensorflow.python.tools import module_util as _module_util
+  File "C:\Users\elinor.g\Documents\comp_scie\DRL\Intrcpt_latest_version_22_10\venv\lib\site-packages\tensorflow\__init__.py", line 50, in __getattr__
+    module = self._load()
+  File "C:\Users\elinor.g\Documents\comp_scie\DRL\Intrcpt_latest_version_22_10\venv\lib\site-packages\tensorflow\__init__.py", line 44, in _load
+    module = _importlib.import_module(self.__name__)
+  File "C:\Users\elinor.g\AppData\Local\Programs\Python\Python36\lib\importlib\__init__.py", line 126, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+ModuleNotFoundError: No module named 'tensorflow_core.python'
 
-    C:\Users\elinor\AppData\Local\Programs\Python\Python36\python.exe C:/Users/elinor/Desktop/Intrcpt/ddqn.py
-    2019-10-15 13:14:15.946083: I tensorflow/core/platform/cpu_feature_guard.cc:142] Your CPU supports instructions that this TensorFlow binary was not compiled to use: AVX2
-    Model: "sequential"
-    _________________________________________________________________
-    Layer (type)                 Output Shape              Param #   
-    =================================================================
-    conv2d (Conv2D)              (None, 30, 30, 32)        896       
-    _________________________________________________________________
-    max_pooling2d (MaxPooling2D) (None, 15, 15, 32)        0         
-    _________________________________________________________________
-    conv2d_1 (Conv2D)            (None, 13, 13, 64)        18496     
-    _________________________________________________________________
-    max_pooling2d_1 (MaxPooling2 (None, 6, 6, 64)          0         
-    _________________________________________________________________
-    conv2d_2 (Conv2D)            (None, 4, 4, 64)          36928     
-    _________________________________________________________________
-    flatten (Flatten)            (None, 1024)              0         
-    _________________________________________________________________
-    dense (Dense)                (None, 64)                65600     
-    _________________________________________________________________
-    dense_1 (Dense)              (None, 10)                650       
-    =================================================================
-    Total params: 122,570
-    Trainable params: 122,570
-    Non-trainable params: 0
-    _________________________________________________________________
-    Model: "sequential_1"
-    _________________________________________________________________
-    Layer (type)                 Output Shape              Param #   
-    =================================================================
-    conv2d_3 (Conv2D)            (None, 30, 30, 32)        896       
-    _________________________________________________________________
-    max_pooling2d_2 (MaxPooling2 (None, 15, 15, 32)        0         
-    _________________________________________________________________
-    conv2d_4 (Conv2D)            (None, 13, 13, 64)        18496     
-    _________________________________________________________________
-    max_pooling2d_3 (MaxPooling2 (None, 6, 6, 64)          0         
-    _________________________________________________________________
-    conv2d_5 (Conv2D)            (None, 4, 4, 64)          36928     
-    _________________________________________________________________
-    flatten_1 (Flatten)          (None, 1024)              0         
-    _________________________________________________________________
-    dense_2 (Dense)              (None, 64)                65600     
-    _________________________________________________________________
-    dense_3 (Dense)              (None, 10)                650       
-    =================================================================
-    Total params: 122,570
-    Trainable params: 122,570
-    Non-trainable params: 0
-    _________________________________________________________________
-    Traceback (most recent call last):
-      File "C:/Users/elinor/Desktop/Intrcpt/ddqn.py", line 162, in <module>
-        exec_process()
-      File "C:/Users/elinor/Desktop/Intrcpt/ddqn.py", line 82, in exec_process
-        history = network.fit(state, epochs=10, batch_size=10)
-      File "C:\Users\elinor\AppData\Local\Programs\Python\Python36\lib\site-packages\tensorflow_core\python\keras\engine\training.py", line 728, in fit
-        use_multiprocessing=use_multiprocessing)
-      File "C:\Users\elinor\AppData\Local\Programs\Python\Python36\lib\site-packages\tensorflow_core\python\keras\engine\training_v2.py", line 224, in fit
-        distribution_strategy=strategy)
-      File "C:\Users\elinor\AppData\Local\Programs\Python\Python36\lib\site-packages\tensorflow_core\python\keras\engine\training_v2.py", line 547, in _process_training_inputs
-        use_multiprocessing=use_multiprocessing)
-      File "C:\Users\elinor\AppData\Local\Programs\Python\Python36\lib\site-packages\tensorflow_core\python\keras\engine\training_v2.py", line 594, in _process_inputs
-        steps=steps)
-      File "C:\Users\elinor\AppData\Local\Programs\Python\Python36\lib\site-packages\tensorflow_core\python\keras\engine\training.py", line 2472, in _standardize_user_data
-        exception_prefix='input')
-      File "C:\Users\elinor\AppData\Local\Programs\Python\Python36\lib\site-packages\tensorflow_core\python\keras\engine\training_utils.py", line 574, in standardize_input_data
-        str(data_shape))
-    ValueError: Error when checking input: expected conv2d_input to have shape (32, 32, 3) but got array with shape (1, 1, 1)
-
-    Process finished with exit code 1
+Process finished with exit code 1
